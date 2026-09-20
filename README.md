@@ -77,7 +77,7 @@ TTYから宣言されたAPIのみが許可される
 ```json
 "DDE"{
     "Window":{
-        "id":str,//ウィンドウid(アドレスポインタの予定)
+        "id":str,//ウィンドウid(アドレスポインタの予定),
         "coordinate"[x,y],//座標
         "size":[w,h],//サイズ
     },
