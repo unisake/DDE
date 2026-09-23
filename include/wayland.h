@@ -87,7 +87,7 @@ struct wayland_server {
 
 //ソケットを構造体でもう一度まとめる
 
-//アウトプットのソケット（よくわからない）
+//アウトプットのソケット（モニタ周辺のステータス）
 struct wayland_output {
 	struct wl_list link;
 	struct wayland_server *server;

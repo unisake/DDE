@@ -142,7 +142,8 @@ int main(int argc, char *argv[]) {
 	 * frame events at the refresh rate, and so on. */
 	wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s",
 			wl_socket);
-	//本体起動
+			
+	//イベントループ実行
 	wl_display_run(server.wl_display);
 
 
