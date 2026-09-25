@@ -1,40 +1,96 @@
 #include "wayland.h"
 
-bool init_server(struct wayland_server *server){
-	server->wl_display = wl_display_create();
-	server->backend = wlr_backend_autocreate(
-		wl_display_get_event_loop(server->wl_display),
-		 &server->session
-		);
-	if (server->backend == NULL) {
-		wlr_log(WLR_ERROR, "failed to create wlr_backend");
-		return false;
-	}
-	server->renderer = wlr_renderer_autocreate(server->backend);
-	if (server->renderer == NULL) {
-		wlr_log(WLR_ERROR, "failed to create wlr_renderer");
-		return false;
-	}
-	wlr_renderer_init_wl_display(server->renderer, server->wl_display);
+//構造体でサーバーのソケットを取得
+struct wayland_server {
+	struct wl_display *wl_display;
+	struct wlr_backend *backend;
+	struct wlr_renderer *renderer;
+	struct wlr_allocator *allocator;
+	struct wlr_scene *scene;
+	struct wlr_scene_output_layout *scene_layout;
+
+	struct wlr_xdg_shell *xdg_shell;
+	struct wl_listener new_xdg_toplevel;
+	struct wl_listener new_xdg_popup;
+	struct wl_list toplevels;
+
+	struct wlr_cursor *cursor;
+	struct wlr_xcursor_manager *cursor_mgr;
+	struct wl_listener cursor_motion;
+	struct wl_listener cursor_motion_absolute;
+	struct wl_listener cursor_button;
+	struct wl_listener cursor_axis;
+	struct wl_listener cursor_frame;
+
+	struct wlr_seat *seat;
+	struct wl_listener new_input;
+	struct wl_listener request_cursor;
+	struct wl_listener pointer_focus_change;
+	struct wl_listener request_set_selection;
+	struct wl_list keyboards;
+	enum wayland_cursor_mode cursor_mode;
+	struct wayland_toplevel *grabbed_toplevel;
+	double grab_x, grab_y;
+	struct wlr_box grab_geobox;
+	uint32_t resize_edges;
+
+	struct wlr_session *session;  // wlr_output_layout の前あたり
+
+	struct wlr_output_layout *output_layout;
+	struct wl_list outputs;
+	struct wl_listener new_output;
+	int de_sock_fd;
+
+	const char *wl_socket;
 	
-	server->allocator = wlr_allocator_autocreate(server->backend,
-	server->renderer);
-	if (server->allocator == NULL) {
-		wlr_log(WLR_ERROR, "failed to create wlr_allocator");
-		return false;
-	}
-	wlr_compositor_create(server->wl_display, 5, server->renderer);
-	wlr_subcompositor_create(server->wl_display);
-	wlr_data_device_manager_create(server->wl_display);
-	server->output_layout = wlr_output_layout_create(server->wl_display);
-	server->scene = wlr_scene_create();
-	server->scene_layout = wlr_scene_attach_output_layout(server->scene, server->output_layout);
-	server->cursor = wlr_cursor_create();
-	wlr_cursor_attach_output_layout(server->cursor, server->output_layout);
-	server->cursor_mgr = wlr_xcursor_manager_create(NULL, 24);
-	server->cursor_mode = wayland_CURSOR_PASSTHROUGH;
-	return true;
-}
+	struct window *window;//APIの値を保持
+};
+
+//アウトプットのソケット（モニタ周辺のステータス）
+struct wayland_output {
+	struct wl_list link;
+	struct wayland_server *server;
+	struct wlr_output *wlr_output;
+	struct wl_listener frame;
+	struct wl_listener request_state;
+	struct wl_listener destroy;
+};
+
+//トップレベルウィンドウのソケット
+struct wayland_toplevel {
+	struct wl_list link;
+	struct wayland_server *server;
+	struct wlr_xdg_toplevel *xdg_toplevel;
+	struct wlr_scene_tree *scene_tree;
+	struct wl_listener map;
+	struct wl_listener unmap;
+	struct wl_listener commit;
+	struct wl_listener destroy;
+	struct wl_listener request_move;
+	struct wl_listener request_resize;
+	struct wl_listener request_maximize;
+	struct wl_listener request_fullscreen;
+
+	struct window *window;//ホスト鯖からもらう
+};
+
+//ポップアップウィンドウのソケット
+struct wayland_popup {
+	struct wlr_xdg_popup *xdg_popup;
+	struct wl_listener commit;
+	struct wl_listener destroy;
+};
+
+//キーボードのソケット
+struct wayland_keyboard {
+	struct wl_list link;
+	struct wayland_server *server;
+	struct wlr_keyboard *wlr_keyboard;
+
+	struct wl_listener modifiers;
+	struct wl_listener key;
+	struct wl_listener destroy;
+};
 
 void focus_toplevel(struct wayland_toplevel *toplevel) {
 	/* Note: this function only deals with keyboard focus. */
@@ -434,6 +490,7 @@ void process_cursor_resize(struct wayland_server *server) {
 
 void process_cursor_motion(struct wayland_server *server, uint32_t time) {
 	/* If the mode is non-passthrough, delegate to those functions. */
+	/*
 	if (server->cursor_mode == wayland_CURSOR_MOVE) {
 		process_cursor_move(server);
 		return;
@@ -441,7 +498,7 @@ void process_cursor_motion(struct wayland_server *server, uint32_t time) {
 		process_cursor_resize(server);
 		return;
 	}
-
+	*/
 	/* Otherwise, find the toplevel under the pointer and send the event along. */
 	double sx, sy;
 	struct wlr_seat *seat = server->seat;
@@ -594,7 +651,7 @@ void server_new_output(struct wl_listener *listener, void *data) {
 	struct wayland_server *server =
 		wl_container_of(listener, server, new_output);
 	struct wlr_output *wlr_output = data;
-
+	wlr_log(WLR_INFO, "NEW OUTPUT: %s", wlr_output->name);
 	/* Configures the output created by the backend to use our allocator
 	 * and our renderer. Must be done once, before committing the output */
 	wlr_output_init_render(wlr_output, server->allocator, server->renderer);
@@ -676,12 +733,14 @@ void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
 void xdg_toplevel_commit(struct wl_listener *listener, void *data) {
 	/* Called when a new surface state is committed. */
 	struct wayland_toplevel *toplevel = wl_container_of(listener, toplevel, commit);
-
+	//ホスト鯖からもらった値で適応
 	if (toplevel->xdg_toplevel->base->initial_commit) {
 		/* When an xdg_surface performs an initial commit, the compositor must
 		 * reply with a configure so the client can map the surface. wayland
 		 * configures the xdg_toplevel with 0,0 size to let the client pick the
 		 * dimensions itself. */
+		//wlr_scene_node_set_position(&toplevel->scene_tree->node,toplevel->window->x,toplevel->window->y);
+		//wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, toplevel->window->w, toplevel->window->h);
 		wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, 0, 0);
 	}
 }
@@ -783,9 +842,10 @@ void xdg_toplevel_request_fullscreen(
 }
 
 void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
+	wlr_log(WLR_INFO, "NEW XDG TOPLEVEL");
 	/* This event is raised when a client creates a new toplevel (application window). */
 	struct wayland_server *server = wl_container_of(listener, server, new_xdg_toplevel);
-	struct wlr_xdg_toplevel *xdg_toplevel = data;
+	struct wlr_xdg_toplevel *xdg_toplevel = data;//もしかしてクライアントから渡ってきてる？
 
 	/* Allocate a wayland_toplevel for this surface */
 	struct wayland_toplevel *toplevel = calloc(1, sizeof(*toplevel));
@@ -816,6 +876,8 @@ void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	wl_signal_add(&xdg_toplevel->events.request_maximize, &toplevel->request_maximize);
 	toplevel->request_fullscreen.notify = xdg_toplevel_request_fullscreen;
 	wl_signal_add(&xdg_toplevel->events.request_fullscreen, &toplevel->request_fullscreen);
+
+	toplevel->window = server->window;//commit用の値を渡す
 }
 
 void xdg_popup_commit(struct wl_listener *listener, void *data) {
@@ -864,4 +926,199 @@ void server_new_xdg_popup(struct wl_listener *listener, void *data) {
 
 	popup->destroy.notify = xdg_popup_destroy;
 	wl_signal_add(&xdg_popup->events.destroy, &popup->destroy);
+}
+
+struct wayland_server *create_server(void)
+{
+    return calloc(1, sizeof(struct wayland_server));
+}
+
+bool init_server(struct wayland_server *server){
+	//*server = (struct wayland_server){0};
+	server->wl_display = wl_display_create();
+	server->backend = wlr_backend_autocreate(
+		wl_display_get_event_loop(server->wl_display),
+		 &server->session
+		);
+	if (server->backend == NULL) {
+		wlr_log(WLR_ERROR, "failed to create wlr_backend");
+		return false;
+	}
+	server->renderer = wlr_renderer_autocreate(server->backend);
+	if (server->renderer == NULL) {
+		wlr_log(WLR_ERROR, "failed to create wlr_renderer");
+		return false;
+	}
+	wlr_renderer_init_wl_display(server->renderer, server->wl_display);
+	
+	server->allocator = wlr_allocator_autocreate(server->backend,
+	server->renderer);
+	if (server->allocator == NULL) {
+		wlr_log(WLR_ERROR, "failed to create wlr_allocator");
+		return false;
+	}
+	wlr_compositor_create(server->wl_display, 5, server->renderer);
+	wlr_subcompositor_create(server->wl_display);
+	wlr_data_device_manager_create(server->wl_display);
+	server->output_layout = wlr_output_layout_create(server->wl_display);
+	server->scene = wlr_scene_create();
+	server->scene_layout = wlr_scene_attach_output_layout(server->scene, server->output_layout);
+	server->cursor = wlr_cursor_create();
+	wlr_cursor_attach_output_layout(server->cursor, server->output_layout);
+	server->cursor_mgr = wlr_xcursor_manager_create(NULL, 24);
+	server->cursor_mode = wayland_CURSOR_PASSTHROUGH;
+
+	/* Configure a listener to be notified when new outputs are available on the
+	 * backend. */
+	wl_list_init(&server->outputs);
+	server->new_output.notify = server_new_output;
+	wl_signal_add(&server->backend->events.new_output, &server->new_output);
+
+	/* Create a scene graph. This is a wlroots abstraction that handles all
+	 * rendering and damage tracking. All the compositor author needs to do
+	 * is add things that should be rendered to the scene graph at the proper
+	 * positions and then call wlr_scene_output_commit() to render a frame if
+	 * necessary.
+	 */
+	//server->scene = wlr_scene_create();
+	//server->scene_layout = wlr_scene_attach_output_layout(server->scene, server->output_layout);
+
+	/* Set up xdg-shell version 3. The xdg-shell is a Wayland protocol which is
+	 * used for application windows. For more detail on shells, refer to
+	 * https://drewdevault.com/2018/07/29/Wayland-shells.html.
+	 */
+	wl_list_init(&server->toplevels);
+	server->xdg_shell = wlr_xdg_shell_create(server->wl_display, 3);
+	server->new_xdg_toplevel.notify = server_new_xdg_toplevel;
+	wl_signal_add(&server->xdg_shell->events.new_toplevel, &server->new_xdg_toplevel);
+	server->new_xdg_popup.notify = server_new_xdg_popup;
+	wl_signal_add(&server->xdg_shell->events.new_popup, &server->new_xdg_popup);
+
+	/*
+	 * Creates a cursor, which is a wlroots utility for tracking the cursor
+	 * image shown on screen.
+	 */
+	//server->cursor = wlr_cursor_create();
+	//wlr_cursor_attach_output_layout(server->cursor, server->output_layout);
+
+	/* Creates an xcursor manager, another wlroots utility which loads up
+	 * Xcursor themes to source cursor images from and makes sure that cursor
+	 * images are available at all scale factors on the screen (necessary for
+	 * HiDPI support). */
+	//server->cursor_mgr = wlr_xcursor_manager_create(NULL, 24);
+
+	/*
+	 * wlr_cursor *only* displays an image on screen. It does not move around
+	 * when the pointer moves. However, we can attach input devices to it, and
+	 * it will generate aggregate events for all of them. In these events, we
+	 * can choose how we want to process them, forwarding them to clients and
+	 * moving the cursor around. More detail on this process is described in
+	 * https://drewdevault.com/2018/07/17/Input-handling-in-wlroots.html.
+	 *
+	 * And more comments are sprinkled throughout the notify functions above.
+	 */
+	//server->cursor_mode = wayland_CURSOR_PASSTHROUGH;
+	server->cursor_motion.notify = server_cursor_motion;
+	wl_signal_add(&server->cursor->events.motion, &server->cursor_motion);
+	server->cursor_motion_absolute.notify = server_cursor_motion_absolute;
+	wl_signal_add(&server->cursor->events.motion_absolute,
+			&server->cursor_motion_absolute);
+	server->cursor_button.notify = server_cursor_button;
+	wl_signal_add(&server->cursor->events.button, &server->cursor_button);
+	server->cursor_axis.notify = server_cursor_axis;
+	wl_signal_add(&server->cursor->events.axis, &server->cursor_axis);
+	server->cursor_frame.notify = server_cursor_frame;
+	wl_signal_add(&server->cursor->events.frame, &server->cursor_frame);
+
+	/*
+	 * Configures a seat, which is a single "seat" at which a user sits and
+	 * operates the computer. This conceptually includes up to one keyboard,
+	 * pointer, touch, and drawing tablet device. We also rig up a listener to
+	 * let us know when new input devices are available on the backend.
+	 */
+	wl_list_init(&server->keyboards);
+	server->new_input.notify = server_new_input;
+	wl_signal_add(&server->backend->events.new_input, &server->new_input);
+	server->seat = wlr_seat_create(server->wl_display, "seat0");
+	server->request_cursor.notify = seat_request_cursor;
+	wl_signal_add(&server->seat->events.request_set_cursor,
+			&server->request_cursor);
+	server->pointer_focus_change.notify = seat_pointer_focus_change;
+	wl_signal_add(&server->seat->pointer_state.events.focus_change,
+			&server->pointer_focus_change);
+	server->request_set_selection.notify = seat_request_set_selection;
+	wl_signal_add(&server->seat->events.request_set_selection,
+			&server->request_set_selection);
+
+	/* Add a Unix socket to the Wayland display. */
+	server->wl_socket = wl_display_add_socket_auto(server->wl_display);
+	if (!server->wl_socket) {
+		wlr_backend_destroy(server->backend);
+		return false;
+	}
+
+	/* Start the backend. This will enumerate outputs and inputs, become the DRM
+	 * master, etc */
+	if (!wlr_backend_start(server->backend)) {
+		wlr_backend_destroy(server->backend);
+		wl_display_destroy(server->wl_display);
+		return false;
+	}
+	setenv("WAYLAND_DISPLAY", server->wl_socket, true);
+	
+	return true;
+}
+
+void server_run(struct wayland_server *server){
+		/* Run the Wayland event loop. This does not return until you exit the
+	 * compositor. Starting the backend rigged up all of the necessary event
+	 * loop configuration to listen to libinput events, DRM events, generate
+	 * frame events at the refresh rate, and so on. */
+		/* Set the WAYLAND_DISPLAY environment variable to our socket and run the
+	 * startup command if requested. */
+	
+    wlr_log(WLR_INFO,
+        "Running Wayland compositor on WAYLAND_DISPLAY=%s",
+        server->wl_socket);
+
+    wlr_log(WLR_INFO, "BEFORE wl_display_run");
+
+    wl_display_run(server->wl_display);
+
+    wlr_log(WLR_INFO, "AFTER wl_display_run");
+
+}
+
+
+void server_destroy(struct wayland_server *server){
+	/* Once wl_display_run returns, we destroy all clients then shut down the
+	 * server-> */
+	wl_display_destroy_clients(server->wl_display);
+
+	wl_list_remove(&server->new_xdg_toplevel.link);
+	wl_list_remove(&server->new_xdg_popup.link);
+
+	wl_list_remove(&server->cursor_motion.link);
+	wl_list_remove(&server->cursor_motion_absolute.link);
+	wl_list_remove(&server->cursor_button.link);
+	wl_list_remove(&server->cursor_axis.link);
+	wl_list_remove(&server->cursor_frame.link);
+
+	wl_list_remove(&server->new_input.link);
+	wl_list_remove(&server->request_cursor.link);
+	wl_list_remove(&server->pointer_focus_change.link);
+	wl_list_remove(&server->request_set_selection.link);
+
+	wl_list_remove(&server->new_output.link);
+	
+	close(server->de_sock_fd);
+	
+	wlr_scene_node_destroy(&server->scene->tree.node);
+	wlr_xcursor_manager_destroy(server->cursor_mgr);
+	wlr_cursor_destroy(server->cursor);
+	wlr_allocator_destroy(server->allocator);
+	wlr_renderer_destroy(server->renderer);
+	wlr_backend_destroy(server->backend);
+	wl_display_destroy(server->wl_display);
+	free(server);
 }
