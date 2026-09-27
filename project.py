@@ -14,17 +14,16 @@ Commit_msg = [
     "docs：",     # 10.ドキュメント・スクリプト等の修正
 ]
 
-Type = 6
+Type = 0
 
 Add_Path = """
-./src/main.c
-./include/wayland.h
-./src/wayland.c
-./project.py
+./preset_settings.c
+./include/dde.h
+./preset_build.sh
 """.strip().splitlines()
 
 Commit_msg[Type] += """
-APIをライブラリ側に押し込んでmainを薄くした
+公開APIを書くヘッダとソースを追加。プロトタイプを記載済み。
 """
 
 print(Commit_msg[Type])
@@ -33,6 +32,11 @@ if input("push? [y/n] ") == "y":
 
     subprocess.run(
         ["git", "add", *Add_Path],
+        check=True
+    )
+
+    subprocess.run(
+        ["git", "add", "./project.py"],
         check=True
     )
 
