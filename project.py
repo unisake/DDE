@@ -1,32 +1,34 @@
 #!/usr/bin/env python3
 import subprocess
-Commit_msg = [
-    "add：",      # 0.新規（ファイル）機能追加
-    "fix：",      # 1.修正(誤字脱字・バグ諸々)
-    "hotfix：",   # 2.クリティカルなバグ修正
-    "update：",   # 3.機能修正（バグではない）
-    "remove：",   # 4.削除（ファイル）
-    "change：",   # 5.仕様変更
-    "refactor：", # 6.外から見た機能・挙動を変えずに、中身を整理する
-    "disable：",  # 7.無効化（コメントアウト等）
-    "upgrade：",  # 8.バージョンアップ
-    "revert：",   # 9.変更取り消し
-    "docs：",     # 10.ドキュメント・スクリプト等の修正
-]#こいつなんとかしたい...
 
-Type = 6
+def commit_msg(prefix, text):
+    return prefix + text
+
+add = "add：" #------------- 新規（ファイル）機能追加
+fix = "fix：" #------------- 修正（誤字脱字・バグ諸々）
+hotfix = "hotfix：" #------- クリティカルなバグ修正
+update = "update：" #------- 機能修正（バグではない）
+remove = "remove：" #------- 削除（ファイル）
+change = "change：" #------- 仕様変更
+refactor = "refactor：" #--- 外から見た機能・挙動を変えずに、中身を整理する
+disable = "disable：" #----- 無効化（コメントアウト等）
+upgrade = "upgrade：" #----- バージョンアップ
+revert = "revert：" #------- 変更取り消し
+docs = "docs：" #----------- ドキュメント・スクリプト等の修正
+
+msg = commit_msg(
+    docs,
+    """
+    スクリプト、meson、READMEを微修正
+    """
+)
 
 Add_Path = """
-./include/wayland.h
-./src/wayland.c
-./src/main.c
+./README.md
+./meson.build
 """.strip().splitlines()
 
-Commit_msg[Type] += """
-不要なAPIを削除
-"""
-
-print(Commit_msg[Type])
+print(msg)
 
 if input("push? [y/n] ") == "y":
 
@@ -41,7 +43,7 @@ if input("push? [y/n] ") == "y":
     )
 
     subprocess.run(
-        ["git", "commit", "-m", Commit_msg[Type]],
+        ["git", "commit", "-m", msg],
         check=True
     )
 

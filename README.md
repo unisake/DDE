@@ -35,7 +35,7 @@ meson compile -C build #実際にコンパイラ突っ込む
 [](あとでbuild.sh作るか)
 ## Start-Up
 
-※TTYから起動する！.
+※TTYから起動する！
 
 ```sh
 ./dde
@@ -89,4 +89,67 @@ TTYから宣言されたAPIのみが許可される
     }
 }
 //DDEが公開するものであって実装はHTMLに含まれるjsとかに依存することに注意！
+```
+
+```sh
+#TTY上で
+./dde ~/sever_conf.c #サーバー(管理者設定)でユーザーに送るAPIを決める
+#サーバー起動後、xdg_shellで
+./dde ~/user_conf.c #ユーザーはサーバ側で公開されたAPIを叩ける
+#つまり...
+#サーバの状態として保持しておきたいもの→Obj
+#ユーザーの操作として公開したいもの→関数ポインタ
+```
+↑権限チェックはTTYかxdg_shellかどうかで確認してる
+
+んじゃ関係性としては...
+`./dde<->dde.h<->server_conf.c<->desktop.h<->user_conf.c`
+みたいな？
+
+
+```c
+//main.c
+#include "wayland.h"//サーバで使うAPI
+#include "dde.h"//サーバ設定APIまとめ
+
+int main{
+
+    //サーバの作成・初期化
+
+    dde()//ここをライブラリで書く
+
+    //サーバの片付け
+}
+```
+```c
+//server_conf.c
+#include "dde.h"
+#include "desktop.h"//ユーザー側に見せるAPIまとめ
+dde(){//読み込まれる設定
+    //管理者設定いろいろ
+    desktop();//ユーザー用のAPI
+}
+```
+dde本体〜管理者設定まではコンパイルして作る
+```sh
+#ビルド環境は管理者に任せる。提供するのはdde.oのみ
+gcc dde.o server_conf.o -o sever.bin
+./server.bin
+```
+ユーザー設定
+```c
+//user_conf.c
+#include "desktop.h"//設定ファイルが公開したAPI
+desktop(){
+    //ユーザー操作いろいろ
+}
+```
+ユーザー設定は動的に読み込む
+```sh
+#管理者がビルドコマンドをまとめるのも良し
+gcc -fPIC -shared user_conf.c -o user_conf.so　
+#管理者が作ったAPIに読ませる
+./server.bin user_conf.so
+#とりあえず管理者がUNIXソケットを用意した体裁だけど
+#.soのdesktop()が呼べれば基本何でも良い
 ```

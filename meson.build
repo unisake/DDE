@@ -14,7 +14,7 @@ inc = include_directories('include')
 #実際にビルド
 #executable(名前,ソースファイル)
 
-executable('dde.o', #出力される実行ファイルの名前
+executable('dde', #出力される実行ファイルの名前
     sources: [ #配列でソース指定
         'src/main.c',
         'src/wayland.c',
