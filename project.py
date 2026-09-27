@@ -12,18 +12,18 @@ Commit_msg = [
     "upgrade：",  # 8.バージョンアップ
     "revert：",   # 9.変更取り消し
     "docs：",     # 10.ドキュメント・スクリプト等の修正
-]
+]#こいつなんとかしたい...
 
-Type = 0
+Type = 6
 
 Add_Path = """
-./preset_settings.c
-./include/dde.h
-./preset_build.sh
+./include/wayland.h
+./src/wayland.c
+./src/main.c
 """.strip().splitlines()
 
 Commit_msg[Type] += """
-公開APIを書くヘッダとソースを追加。プロトタイプを記載済み。
+不要なAPIを削除
 """
 
 print(Commit_msg[Type])

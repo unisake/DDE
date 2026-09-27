@@ -43,23 +43,53 @@ enum wayland_cursor_mode {
 	wayland_CURSOR_RESIZE,
 };
 
-struct window {
-	char *app_cmd;
-	int x;
-	int y;
-	int w;
-	int h;
+typedef struct{
+	struct wl_display *wl_display;
+	struct wlr_backend *backend;
+	struct wlr_renderer *renderer;
+	struct wlr_allocator *allocator;
+	struct wlr_scene *scene;
+	struct wlr_scene_output_layout *scene_layout;
 
-};
+	struct wlr_xdg_shell *xdg_shell;
+	struct wl_listener new_xdg_toplevel;
+	struct wl_listener new_xdg_popup;
+	struct wl_list toplevels;
 
-struct wayland_server;
+	struct wlr_cursor *cursor;
+	struct wlr_xcursor_manager *cursor_mgr;
+	struct wl_listener cursor_motion;
+	struct wl_listener cursor_motion_absolute;
+	struct wl_listener cursor_button;
+	struct wl_listener cursor_axis;
+	struct wl_listener cursor_frame;
 
-struct wayland_server *create_server(void);
+	struct wlr_seat *seat;
+	struct wl_listener new_input;
+	struct wl_listener request_cursor;
+	struct wl_listener pointer_focus_change;
+	struct wl_listener request_set_selection;
+	struct wl_list keyboards;
 
-bool init_server(struct wayland_server *server);
+	struct wlr_session *session;  // wlr_output_layout の前あたり
 
-void server_run(struct wayland_server *server);
+	struct wlr_output_layout *output_layout;
+	struct wl_list outputs;
+	struct wl_listener new_output;
+	int de_sock_fd;
 
-void server_destroy(struct wayland_server *server);
+	const char *wl_socket;
+
+	int position[2];
+    int size[2];
+}dde_server;
+
+dde_server *create_server(void);
+
+bool init_server(dde_server *server);
+
+void server_run(dde_server *server);
+
+void server_destroy(dde_server *server);
 
 #endif /*WAYLAND_H*/
