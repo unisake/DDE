@@ -19,35 +19,21 @@ docs = "docs：" #----------- ドキュメント・スクリプト等の修正
 msg = commit_msg(
     docs,
     """
-    スクリプト、meson、READMEを微修正
+    スクリプトが気に入らなかったのでもう一回修正
     """
 )
 
 Add_Path = """
-./README.md
-./meson.build
+./project.py
 """.strip().splitlines()
 
 print(msg)
 
 if input("push? [y/n] ") == "y":
 
-    subprocess.run(
+    for command in [
         ["git", "add", *Add_Path],
-        check=True
-    )
-
-    subprocess.run(
-        ["git", "add", "./project.py"],
-        check=True
-    )
-
-    subprocess.run(
         ["git", "commit", "-m", msg],
-        check=True
-    )
-
-    subprocess.run(
         ["git", "push"],
-        check=True
-    )
+    ]:
+        subprocess.run(command, check=True)
