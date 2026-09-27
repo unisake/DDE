@@ -1,6 +1,16 @@
 //wayland.c
 #include "wayland.h"
 
+#include <assert.h>
+#include <wlr/backend.h>
+#include <wlr/backend/session.h>
+#include <wlr/render/allocator.h>
+#include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_xcursor_manager.h>
 
 //アウトプットのソケット（モニタ周辺のステータス）
 struct wayland_output {

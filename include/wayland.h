@@ -2,39 +2,11 @@
 #ifndef WAYLAND_H
 #define WAYLAND_H
 
-#include <assert.h>
-#include <getopt.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <time.h>
+#include <stdlib.h> //malloc使いたい
 #include <unistd.h>
 #include <wayland-server-core.h>
-#include <wlr/backend.h>
-#include <wlr/backend/session.h>
-#include <wlr/backend/multi.h>
-#include <wlr/render/allocator.h>
-#include <wlr/render/wlr_renderer.h>
-#include <wlr/types/wlr_cursor.h>
-#include <wlr/types/wlr_compositor.h>
-#include <wlr/types/wlr_data_device.h>
-#include <wlr/types/wlr_input_device.h>
-#include <wlr/types/wlr_keyboard.h>
-#include <wlr/types/wlr_output.h>
-#include <wlr/types/wlr_output_layout.h>
-#include <wlr/types/wlr_pointer.h>
-#include <wlr/types/wlr_scene.h>
-#include <wlr/types/wlr_seat.h>
-#include <wlr/types/wlr_subcompositor.h>
-#include <wlr/types/wlr_xcursor_manager.h>
-#include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
-#include <xkbcommon/xkbcommon.h>
-//UNIXソケット用
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <sys/stat.h>
-#include <string.h>
+#include <xkbcommon/xkbcommon.h> //キーボードの対応表
 
 //カーソルのモードを列挙型で指定
 enum wayland_cursor_mode {
